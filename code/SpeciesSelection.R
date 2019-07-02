@@ -320,21 +320,47 @@ GetTripletScores<-function(newtriplet, selectedtriplets) {
 	
 	return(c(sc_HHP, sc_PPH, sc_HHH, sc_SGP))
 }
+# a function to get triplet scores when removing teh first element in the second list. 
+GetTripletScores_rm<-function(triplettoremove, selectedtriplets) {
+	triplets<-setdiff(selectedtriplets, triplettoremove)
+	allmono <-  GetAllMono(triplets)
+	
+	# separer H et P
+	all_mono_H <- unique(row.names(H)[which(is.element(row.names(H),allmono))])
+	all_mono_P <- unique(row.names(P)[which(is.element(row.names(P),allmono))])
+
+  # the -1 in the score is because we don't want to count the value of 0 in the cubes as a cluster.
+	sc_HHP<-length(unique(array(CUBE_HHP[all_mono_H,all_mono_H,all_mono_P])))-1
+	sc_PPH<-length(unique(array(CUBE_PPH[all_mono_P,all_mono_P,all_mono_H])))-1
+	sc_HHH<-length(unique(array(CUBE_HHH[all_mono_H,all_mono_H,all_mono_H])))-1
+  # we add the duplet score:
+  sc_SGP<-length(unique(array(SGPDup_mat[all_mono_P,all_mono_P])))-1
+	
+	return(c(sc_HHP, sc_PPH, sc_HHH, sc_SGP))
+}
 # a function to put a triplet list (tab format) into string format (not removing duplicates, if there are any...)
-Trip2str<-function(alltriplets){
+trip2str<-function(alltriplets){
 	alltrip_string<-apply(alltriplets[,1:3],1,function(x) paste(sort(x), collapse="&"))
 	return(alltrip_string)
 }
-# GetSGP_duplet_scores<-function(newtriplet,selectedtriplets) {
-# 	alltriplets<-rbind(newtriplet,selectedtriplets)
-# 	allmono<-unique(c(alltriplets[,1], alltriplets[,2],alltriplets[,3]))
-# 	all_mono_P <- unique(row.names(P)[which(is.element(row.names(P),allmono))])
-# 	SGP_score <- sum(SGPDup_mat[all_mono_P,all_mono_P])
-# #	return(SGP_score+epsilon) ###WHAT IS EPSILON?
-# 	return(SGP_score)
+# the opposite function
+str2trip<-function(alltriplets) {
+	return(do.call(rbind, strsplit(alltriplets,"&")))
+}
 
-# }
-    
+## This function reupdates both the list of selected and available triplets.
+## Indeed, adding some triplets may add others by construction, that remain in
+## the list of available triplets while they are in fact already selected.
+Rebuild_triplets<-function(selected_triplets, available_triplets) {
+	#get all species
+	allmono <-  GetAllMono(selected_triplets)
+	available_tab<-str2trip(available_triplets)
+	available_tab_na<-matrix(match(available_tab, allmono), ncol=3,byrow=F)
+	is_really_available<-is.na(apply(available_tab_na,1,sum)) #when FALSE, it means that this triplet marked as availbale is not, in fact.
+	selected_triplets_real<-c(selected_triplets, available_triplets[!is_really_available])
+	available_triplets_real<-available_triplets[is_really_available]
+	return(list(selected=selected_triplets_real, available=available_triplets_real))
+}
 
 
 TRP<-GetTriplets(S_lien=30, S_nl=60, D_seuil_min=0.1) ##HHP and PPH triplets; uncomment if recomputing
@@ -373,35 +399,58 @@ for (i in 1:nrow(TRPl)) {
 trip_HHP <- TRP$TRIPH
 trip_PPH <- TRP$TRIPP
 trip_HHH <- TRPl
-AllTriplets<-Trip2str(rbind(trip_HHP,trip_PPH,trip_HHH))
+AllTriplets<-trip2str(rbind(trip_HHP,trip_PPH,trip_HHH))
 
 ########## PARAMETERS FOR OPTIMIZATION
 # Number of triplets per category for start.
-n_rand_trip_HHP<-5
-n_rand_trip_PPH<-5
-n_rand_trip_HHH<-5
+Freq.remove<-10 #every 10rounds, instead of adding best triplet, we remove the one with less impact when removed.
+cpt<-0 #count the number of loops of the optimization process
+maxSP<-125 #max number of species to select (stoping criteria)
+n_rand_trip_HHP<-5 # nb of randomly chosen HHP triplets for starting
+n_rand_trip_PPH<-5 # nb of randomly chosen PPH triplets for starting
+n_rand_trip_HHH<-5 # nb of randomly chosen HHH triplets for starting
+
+# Initiation
 rand_HHP_trip <-trip_HHP[sample(nrow(trip_HHP), n_rand_trip_HHP), ] # pick randomly some HHP triplets
 rand_PPH_trip <-trip_PPH[sample(nrow(trip_PPH), n_rand_trip_PPH), ] # pick randomly some PPH triplets
 rand_HHH_trip <-trip_HHH[sample(nrow(trip_HHH), n_rand_trip_HHH), ] # pick randomly some HHH triplets
 Selected<-rbind(rand_HHP_trip,rand_PPH_trip, rand_HHH_trip)
-SelectedTrip<-Trip2str(Selected)
-print(SelectedTrip)
-# 
+SelectedTrip<-trip2str(Selected)
 AvailableTrip<-setdiff(AllTriplets, SelectedTrip)
+       ### TRIPLETS CORRECTIONS
+CORRECTED_TRIPLETS<-Rebuild_triplets(SelectedTrip, AvailableTrip)
+SelectedTrip<-CORRECTED_TRIPLETS$selected ##REAL selected
+AvailableTrip<-CORRECTED_TRIPLETS$available ##REAL available
 n_rand_trip <- length(SelectedTrip)
 # calculate the score from the current list of selected
 TripScore_s_Init <- GetTripletScores(newtriplet=SelectedTrip[n_rand_trip], selectedtriplets=SelectedTrip[-n_rand_trip])
-# triplet score:
+# Initial score:
 TripScoreInit <- geomean(TripScore_s_Init)
 print(TripScore_s_Init)
 
-
-while (length(GetAllMono(SelectedTrip))<125) {
-	print(length(GetAllMono(SelectedTrip)<125))
-	GetScoresDetails<-sapply(AvailableTrip, GetTripletScores, selectedtriplets=SelectedTrip)
-	GetScores<-apply(GetScoresDetails,2,geomean)
-	NewTrip<-sample(names(which(GetScores==max(GetScores))),1)
-	SelectedTrip<-c(SelectedTrip, NewTrip)
-	AvailableTrip<-setdiff(AvailableTrip, NewTrip)
-	print(max(GetScores))
+SAVESCORE<-array()
+while (length(GetAllMono(SelectedTrip))<maxSP) {
+	cpt <- cpt + 1
+	print(cpt)
+	print(length(SelectedTrip))
+	if (cpt%%Freq.remove==0) {
+		GetScoresDetails<-sapply(SelectedTrip, GetTripletScores_rm, selectedtriplets=SelectedTrip)
+		GetScores<-apply(GetScoresDetails,2,geomean)
+		TripToRemove<-sample(names(which(GetScores==max(GetScores))),1)
+		SelectedTrip<-setdiff(SelectedTrip, TripToRemove)
+		AvailableTrip<-c(AvailableTrip, TripToRemove)
+	}
+	else {
+		GetScoresDetails<-sapply(AvailableTrip, GetTripletScores, selectedtriplets=SelectedTrip)
+		GetScores<-apply(GetScoresDetails,2,geomean)
+		NewTrip<-sample(names(which(GetScores==max(GetScores))),1)
+		SelectedTrip<-c(SelectedTrip, NewTrip)
+		AvailableTrip<-setdiff(AvailableTrip, NewTrip)
+		### TRIPLETS CORRECTIONS (to recoverthe triplets that are already chosen but that we ignored.)
+		CORRECTED_TRIPLETS<-Rebuild_triplets(SelectedTrip, AvailableTrip)
+		SelectedTrip<-CORRECTED_TRIPLETS$selected ##REAL selected
+		AvailableTrip<-CORRECTED_TRIPLETS$available ##REAL available
+	}
 }
+
+
