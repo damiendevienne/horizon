@@ -401,9 +401,9 @@ printit<-function(scs, scg, sps) {
 }
 
 
-TRP<-GetTriplets(S_lien=20, S_nl=40, D_seuil_min=0.1) ##HHP and PPH triplets; uncomment if recomputing
-TRPl<-GetTripletPlants(S_lien=20,S_nl=40, D_seuil_minH1H2=0.1) #HHH triplets (plant triplets); uncomment if recomputing
-SGPDup_mat<-GetSGPDuplets(threshold_n_obs=5, D_seuil_min_SG=0.1, low_par_spec_index = 0.34, high_par_spec_index = 0.98)
+TRP<-GetTriplets(S_lien=15, S_nl=30, D_seuil_min=0.1) ##HHP and PPH triplets; uncomment if recomputing
+TRPl<-GetTripletPlants(S_lien=15,S_nl=30, D_seuil_minH1H2=0.1) #HHH triplets (plant triplets); uncomment if recomputing
+SGPDup_mat<-GetSGPDuplets(threshold_n_obs=4, D_seuil_min_SG=0.1, low_par_spec_index = 0.34, high_par_spec_index = 0.98)
 
 
 ## Put triplets in cube format. NEW: we put in the cube the 
@@ -438,6 +438,7 @@ trip_HHP <- TRP$TRIPH
 trip_PPH <- TRP$TRIPP
 trip_HHH <- TRPl
 ALLTRIPLETS_TOTAL <- rbind(trip_HHP,trip_PPH,trip_HHH)
+ALLTRIPLETS<-ALLTRIPLETS_TOTAL
 AllTriplets<-trip2str(ALLTRIPLETS_TOTAL)
 
 ########## PARAMETERS FOR OPTIMIZATION
@@ -492,15 +493,16 @@ printit(TripScore_s_Init,TripScoreInit, length(GetAllMono(SelectedTrip)))
 while (length(GetAllMono(SelectedTrip))<maxSP) {
 	cpt <- cpt + 1
 	cat(paste("cpt: ",cpt,"\n"))
-	cat(paste(length(GetAllMono(SelectedTrip))," species -> ",sep=""))
-	### CORRIGER ça
+#	cat(paste(length(GetAllMono(SelectedTrip))," species -> ",sep=""))
+	cat("playing with ",nrow(ALLTRIPLETS), " triplets in total\n")
+
 	if (cpt%%Freq.remove==0) {
 		GetScoresDetails<-sapply(SelectedTrip, GetTripletScores_rm, selectedtriplets=SelectedTrip)
 		GetScores<-apply(GetScoresDetails,2,geomean)
 		TripletOfInterest<-sample(names(which(GetScores==max(GetScores))),1)
 		# get list of species after removing that triplet
 		NewListOfSpecies<-setdiff(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest)))
-		cat(paste("removed",TripletOfInterest,"\n"))
+#		cat(paste("removed",TripletOfInterest,"\n"))
 	}
 
 	else {
@@ -510,10 +512,10 @@ while (length(GetAllMono(SelectedTrip))<maxSP) {
 		TripletOfInterest<-sample(names(which(GetScores==max(GetScores))),1)
 		# get new list of species after adding those in the new triplet.
 		NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
-		cat(paste("added",TripletOfInterest,"\n"))
+#		cat(paste("added",TripletOfInterest,"\n"))
 	}
 	if ((cpt == 1) || ((cpt-1)%%Freq.reload_all_TRIPLETS==0)) { ##we just did the first run OR we are just after a turn where we retook everyone 
-		cat("\n### RESAMPLING BEST TRIPLETS ###\n")
+		cat("\n# Sampling best triplets for next runs...\n")
 		# we order all Triplets by there scores for each category of score
 		OrderedMatricScores<-apply(GetScoresDetails,1,order)
 		# we count how many different triplets are selected given where we cut in the list of ordered triplets
@@ -528,7 +530,7 @@ while (length(GetAllMono(SelectedTrip))<maxSP) {
 		ALLTRIPLETS<-str2trip(Sp2Triplets(ALLSPECIES, ALLTRIPLETS_TOTAL)$selected)
 	}
 	if (cpt%%Freq.reload_all_TRIPLETS==0) {
-		cat("\n### REINJECTING ALL TRIPLETS... ###\n")
+		cat("\n# Re-injecting all triplets for next run... \n")
 		ALLTRIPLETS<-ALLTRIPLETS_TOTAL
 	}
 
@@ -536,10 +538,8 @@ while (length(GetAllMono(SelectedTrip))<maxSP) {
 	SelectedTrip<-UPDATED_TRIPLETS$selected ##REAL selected
 	AvailableTrip<-UPDATED_TRIPLETS$available ##REAL available
 	# print results
-
-	cat("---\nplaying with ",nrow(ALLTRIPLETS), " triplets in total\n")
 	printit(GetScoresDetails[,TripletOfInterest], geomean(GetScoresDetails[,TripletOfInterest]), length(GetAllMono(SelectedTrip)))
-	cat("--\n")
+	cat("---\n")
 #	cat(paste(c("sc_HHP:", "sc_PPH:", "sc_HHH:", "sc_SGP:"),GetScoresDetails[,TripletOfInterest]))
 #	cat("\n")
 
