@@ -389,6 +389,13 @@ require(reshape2)
     res<-apply(test,2,function(x) sum(x=="Tachinidae", na.rm=TRUE)>0)
     return(res)
   }
+  # function to get the type of triplet from a list of triplets
+  WhatTypeOfTriplet<-function(listoftriplets) {
+    triptab<-str2trip(listoftriplets)
+    where_is_p<-matrix(match(triptab,rownames(P)),ncol=3)
+    nbp<-apply(where_is_p,1,function(x) length(x[!is.na(x)]))
+    return(nbp)
+  }
 }
 
 ### read and clean data
@@ -621,30 +628,30 @@ require(reshape2)
           AvailableTripTab <- str2trip(AvailableTrip)
           
           # if too many parasitoids, remove parasitoid triplets
-          if (current_par_prop>=max_par_prop){
-            sps_1 <- AvailableTripTab[,1]
-            sps_2 <- AvailableTripTab[,2]
-            sps_3 <- AvailableTripTab[,3]
-            par_sps_pos_1 <- is.element(sps_1,all_par_sps)
-            par_sps_pos_2 <- is.element(sps_2,all_par_sps)
-            par_sps_pos_3 <- is.element(sps_3,all_par_sps)
-            all_par_sps_pos <- par_sps_pos_1 + par_sps_pos_2 + par_sps_pos_3
-            pph_pos <- which(all_par_sps_pos==2)
-            AvailableTrip<-AvailableTrip[-pph_pos]
-          }
+          # if (current_par_prop>=max_par_prop){
+          #   sps_1 <- AvailableTripTab[,1]
+          #   sps_2 <- AvailableTripTab[,2]
+          #   sps_3 <- AvailableTripTab[,3]
+          #   par_sps_pos_1 <- is.element(sps_1,all_par_sps)
+          #   par_sps_pos_2 <- is.element(sps_2,all_par_sps)
+          #   par_sps_pos_3 <- is.element(sps_3,all_par_sps)
+          #   all_par_sps_pos <- par_sps_pos_1 + par_sps_pos_2 + par_sps_pos_3
+          #   pph_pos <- which(all_par_sps_pos==2)
+          #   AvailableTrip<-AvailableTrip[-pph_pos]
+          # }
 
-          # if not enough parasitoids, remove host triplets
-          if (current_par_prop<=min_par_prop){
-            sps_1 <- AvailableTripTab[,1]
-            sps_2 <- AvailableTripTab[,2]
-            sps_3 <- AvailableTripTab[,3]
-            par_sps_pos_1 <- is.element(sps_1,all_par_sps)
-            par_sps_pos_2 <- is.element(sps_2,all_par_sps)
-            par_sps_pos_3 <- is.element(sps_3,all_par_sps)
-            all_par_sps_pos <- par_sps_pos_1 + par_sps_pos_2 + par_sps_pos_3
-            pph_pos <- which(all_par_sps_pos==2)
-            AvailableTrip<-AvailableTrip[pph_pos]
-          }
+          # # if not enough parasitoids, remove host triplets
+          # if (current_par_prop<=min_par_prop){
+          #   sps_1 <- AvailableTripTab[,1]
+          #   sps_2 <- AvailableTripTab[,2]
+          #   sps_3 <- AvailableTripTab[,3]
+          #   par_sps_pos_1 <- is.element(sps_1,all_par_sps)
+          #   par_sps_pos_2 <- is.element(sps_2,all_par_sps)
+          #   par_sps_pos_3 <- is.element(sps_3,all_par_sps)
+          #   all_par_sps_pos <- par_sps_pos_1 + par_sps_pos_2 + par_sps_pos_3
+          #   pph_pos <- which(all_par_sps_pos==2)
+          #   AvailableTrip<-AvailableTrip[pph_pos]
+          # }
           
           # if tachinid proportion at the previous round was equal or larger than max_tach_prop, remove tach triplets
           # if (current_tach_prop>=max_tach_prop){
@@ -678,11 +685,31 @@ require(reshape2)
           GetScores2<-GetScores
         }
         if (length(GetScores2)>0) {
-          TripletOfInterest<-sample(names(which(GetScores2==max(GetScores2))),1)
-          # get new list of species after adding those in the new triplet.
-          #print(GetTachProp(SelectedTrip))
-          #print(GetTachProp(c(SelectedTrip, TripletOfInterest)))
-          NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
+          ###NEW: IT IS HERE THAT WE CHECK PARASITOIDS NUMBER. 
+          if ((current_par_prop>=min_par_prop)&(current_par_prop<=max_par_prop)) {
+            print("Not too many or too few parasitoids")
+            GetScores3<-GetScores2
+          }
+          else { #not enough or too many parasitoids
+            if (current_par_prop>=max_par_prop){ ##too many parasitoids -> keep only hhp and hhh
+              print("Too many parasitoids... remove pph from possible triplets")
+              GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))<2]
+            }
+            if (current_par_prop<=min_par_prop){ ##too few parasitoids -> keep only pph and hhh (remove hhp)
+              print("Too few parasitoids... remove hhp from possible triplets") ###CHECK IF WE WANT TO REMOVE HHH AS WELL HERE? IN SUCH CASE, WE SHOULD WRITE: GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))==2]
+              GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))!=1]
+            }
+          }
+          if (length(GetScore3)>0) {
+            TripletOfInterest<-sample(names(which(GetScores3==max(GetScores3))),1)
+             # get new list of species after adding those in the new triplet.
+            #print(GetTachProp(SelectedTrip))
+            #print(GetTachProp(c(SelectedTrip, TripletOfInterest)))
+            NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
+          }
+          else {
+            REBUILD_SUBLIST<-TRUE
+          }
         }
         else {
           REBUILD_SUBLIST<-TRUE        ##TELL THAT WE NEED TO MAKE A NEW SUBLIST WITH NON-TACH TRIPLETS
