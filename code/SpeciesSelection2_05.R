@@ -600,6 +600,7 @@ require(reshape2)
     
     #### PARAMATER FOR OPTIMIZATION
     REBUILD_SUBLIST<-FALSE #when this becomes TRUE, a new sublist is redone, prematurately compared to the frequency decided.
+    JUST_DID_IT<-FALSE #agit comme un intrerrupteur pour dire qu'on vient de tout reselectionner et qu'il faut échantilloner au tour suivant.
     #### OPTIMIZATION
     ALLTRIPLETS<-ALLTRIPLETS_TOTAL
     cpt<-0 #count the number of loops of the optimization process
@@ -625,7 +626,7 @@ require(reshape2)
           cat("current_par_prop: ",current_par_prop, "\n")
           cat("current_tach_prop: ",current_tach_prop, "\n")
           
-          AvailableTripTab <- str2trip(AvailableTrip)
+#          AvailableTripTab <- str2trip(AvailableTrip)
           
           # if too many parasitoids, remove parasitoid triplets
           # if (current_par_prop>=max_par_prop){
@@ -716,7 +717,7 @@ require(reshape2)
         }
         #		cat(paste("added",TripletOfInterest,"\n"))
       }
-      if ((cpt == 1) || ((cpt-1)%%Freq.reload_all_TRIPLETS==0)) { ##we just did the first run OR we are just after a turn where we retook everyone 
+      if ((cpt == 1) || ((cpt-1)%%Freq.reload_all_TRIPLETS==0) || (JUST_DID_IT==TRUE)) { ##we just did the first run OR we are just after a turn where we retook everyone 
         cat("\n# Sampling best triplets for next runs...\n")
         ##NEW : we order triplets by the global score, not each individual score
         OrderedTriplets<-sort(GetScores, decreasing=TRUE)
@@ -730,11 +731,13 @@ require(reshape2)
         ##we create the list of 'ALLTRIPLETS' that we will keep for some Time.
         ALLSPECIES<-GetAllMono(c(SelectedTrip,TripletsToKeepName))
         ALLTRIPLETS<-str2trip(Sp2Triplets(ALLSPECIES, ALLTRIPLETS_TOTAL)$selected)
+        JUST_DID_IT<-FALSE
       }
       if (cpt%%Freq.reload_all_TRIPLETS==0 || (REBUILD_SUBLIST==TRUE)) {
         cat("\n# Re-injecting all triplets for next run... \n")
         ALLTRIPLETS<-ALLTRIPLETS_TOTAL
         REBUILD_SUBLIST<-FALSE # SET IT BACK TO ITS DEFAULT VALUE 
+        JUST_DID_IT<-TRUE #TELLS THE CODE TO RE-RUN THE SELECTION OF SUBSET OF BEST TRIPLETS AT NEXT RUN.
       }
       
       UPDATED_TRIPLETS <- Sp2Triplets(NewListOfSpecies, ALLTRIPLETS)
