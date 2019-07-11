@@ -376,13 +376,19 @@ require(reshape2)
   
   # a function to count the proportion of tachinid species
   GetTachProp<-function(selectedtriplets) {
-    selectedtriplets <- str2trip(selectedtriplets)
-    allmono <- unique(c(selectedtriplets[,1], selectedtriplets[,2],selectedtriplets[,3]))
+    allmono <- GetAllMono(selectedtriplets)
     P_fam <- P$family[which(is.element(row.names(P),allmono))]
     tach_prop <- length(which(P_fam=="Tachinidae"))/length(P_fam)
     return(tach_prop)
+  } 
+
+  # function that returns an array of same dimension than listoftriplets with TRUE if there is a Tachnidae inside, FALSE otherwise
+  isTachOrNot<-function(listoftriplets) {
+    triptab<-str2trip(listoftriplets)
+    test<-apply(triptab,1,function(x,K) K[x,"family"],K=P)
+    res<-apply(test,2,function(x) sum(x=="Tachinidae", na.rm=TRUE)>0)
+    return(res)
   }
-  
 }
 
 ### read and clean data
@@ -466,7 +472,7 @@ require(reshape2)
 ### compute or read triplets and cubes
 {
   TRP<-GetTriplets(S_lien=S_lien, S_nl=S_nl, D_seuil_min=D_seuil_min) ##HHP and PPH triplets; uncomment if recomputing
-  TRPl<-GetTripletPlants(S_lien=5,S_nl=10, D_seuil_minH1H2=0.1) #HHH triplets (plant triplets); uncomment if recomputing
+  TRPl<-GetTripletPlants(S_lien=10,S_nl=20, D_seuil_minH1H2=0.1) #HHH triplets (plant triplets); uncomment if recomputing
   
   #save(TRP,TRPl, file="computed_triplets.Rdata") # uncomment if you want to save this for later
   #load("computed_triplets.Rdata") # uncomment if you load data
@@ -585,6 +591,8 @@ require(reshape2)
       
     }
     
+    #### PARAMATER FOR OPTIMIZATION
+    REBUILD_SUBLIST<-FALSE #when this becomes TRUE, a new sublist is redone, prematurately compared to the frequency decided.
     #### OPTIMIZATION
     ALLTRIPLETS<-ALLTRIPLETS_TOTAL
     cpt<-0 #count the number of loops of the optimization process
@@ -610,7 +618,7 @@ require(reshape2)
           cat("current_par_prop: ",current_par_prop, "\n")
           cat("current_tach_prop: ",current_tach_prop, "\n")
           
-          AvailableTripTab <- str2trip(AvailableTrip)
+#          AvailableTripTab <- str2trip(AvailableTrip)
           
           # # if too many parasitoids, remove parasitoid triplets
           # if (current_par_prop>=max_par_prop){
@@ -627,17 +635,17 @@ require(reshape2)
           # }
           
           # if tachinid proportion at the previous round was equal or larger than max_tach_prop, remove tach triplets
-          if (current_tach_prop>=max_tach_prop){
-            sps_1 <- AvailableTripTab[,1]
-            sps_2 <- AvailableTripTab[,2]
-            sps_3 <- AvailableTripTab[,3]
+          # if (current_tach_prop>=max_tach_prop){
+          #   sps_1 <- AvailableTripTab[,1]
+          #   sps_2 <- AvailableTripTab[,2]
+          #   sps_3 <- AvailableTripTab[,3]
             
-            tach_sps_pos <- unique(c(which(is.element(sps_1,all_tach_sps)), which(is.element(sps_2,all_tach_sps)), which(is.element(sps_3,all_tach_sps))))
-            AvailableTrip<-AvailableTrip[-tach_sps_pos]
+          #   tach_sps_pos <- unique(c(which(is.element(sps_1,all_tach_sps)), which(is.element(sps_2,all_tach_sps)), which(is.element(sps_3,all_tach_sps))))
+          #   AvailableTrip<-AvailableTrip[-tach_sps_pos]
             
-          }
+          # }
           
-          cat("N triplets after filtering: ",length(AvailableTrip), "\n")
+          # cat("N triplets after filtering: ",length(AvailableTrip), "\n")
           
         }
         
@@ -645,29 +653,50 @@ require(reshape2)
         
         GetScoresDetails<-GetTripletScores2(AvailableTrip, SelectedTrip)
         GetScores<-apply(GetScoresDetails,2,geomean)
-        TripletOfInterest<-sample(names(which(GetScores==max(GetScores))),1)
-        # get new list of species after adding those in the new triplet.
-        NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
+        ###NEW: IT IS HERE THAT WE DECIDE TO CHOSE A NON-TACH TRIPLET IF TOO MANY TACH ARE ALREADY IN THERE 
+        if (current_tach_prop>=max_tach_prop){
+          print("YES, bad.")
+          #we generate a sublist of scores with ONLY the non-TACH cases.
+          GetScores2<-GetScores[!isTachOrNot(names(GetScores))]
+
+          print(length(GetScores))
+          print(length(GetScores2))
+        }
+        else {
+          print("NO, ok")
+          GetScores2<-GetScores
+        }
+        if (length(GetScores2)>0) {
+          TripletOfInterest<-sample(names(which(GetScores2==max(GetScores2))),1)
+          # get new list of species after adding those in the new triplet.
+          print(GetTachProp(SelectedTrip))
+          print(GetTachProp(c(SelectedTrip, TripletOfInterest)))
+          NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
+        }
+        else {
+          REBUILD_SUBLIST<-TRUE        ##TELL THAT WE NEED TO MAKE A NEW SUBLIST WITH NON-TACH TRIPLETS
+        }
         #		cat(paste("added",TripletOfInterest,"\n"))
       }
       if ((cpt == 1) || ((cpt-1)%%Freq.reload_all_TRIPLETS==0)) { ##we just did the first run OR we are just after a turn where we retook everyone 
         cat("\n# Sampling best triplets for next runs...\n")
-        # we order all Triplets by there scores for each category of score
-        OrderedMatricScores<-apply(GetScoresDetails,1,order)
-        # we count how many different triplets are selected given where we cut in the list of ordered triplets
-        NbTripletsConsidered<-sapply(1:nrow(OrderedMatricScores),function(x, D) length(unique(array(D[x:nrow(D),]))), D=OrderedMatricScores)
-        # we only consider best triplets so that the number of triplets considered equals SampleSizeAvailable
-        FromeWhereToGet<-which(NbTripletsConsidered<=SampleSizeAvailable)[1]
-        # get all triplets from this index:
-        TripletsToKeep<-unique(array(OrderedMatricScores[FromeWhereToGet:nrow(OrderedMatricScores),]))
-        TripletsToKeepName<-AvailableTrip[TripletsToKeep]
+        ##NEW : we order triplets by the global score, not each individual score
+        OrderedTriplets<-sort(GetScores, decreasing=TRUE)
+        TachOrNot<-isTachOrNot(names(OrderedTriplets))
+
+        cumprop<-cumsum(TachOrNot)/(1:length(TachOrNot)) ##cumulative proportion of tach-containing triplets
+        plot(cumprop)
+        testCompatible<-(1:length(TachOrNot)>=SampleSizeAvailable)&(cumprop<0.8) #at least "SampleSizeAvailable" triplets, AND less than 80% tach-containing triplets
+        ToWhereToTakeTriplets<-which(testCompatible)[1]
+        TripletsToKeepName<-names(OrderedTriplets)[1:ToWhereToTakeTriplets]
         ##we create the list of 'ALLTRIPLETS' that we will keep for some Time.
         ALLSPECIES<-GetAllMono(c(SelectedTrip,TripletsToKeepName))
         ALLTRIPLETS<-str2trip(Sp2Triplets(ALLSPECIES, ALLTRIPLETS_TOTAL)$selected)
       }
-      if (cpt%%Freq.reload_all_TRIPLETS==0) {
+      if (cpt%%Freq.reload_all_TRIPLETS==0 || (REBUILD_SUBLIST==TRUE)) {
         cat("\n# Re-injecting all triplets for next run... \n")
         ALLTRIPLETS<-ALLTRIPLETS_TOTAL
+        REBUILD_SUBLIST<-FALSE # SET IT BACK TO ITS DEFAULT VALUE 
       }
       
       UPDATED_TRIPLETS <- Sp2Triplets(NewListOfSpecies, ALLTRIPLETS)
