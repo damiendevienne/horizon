@@ -610,7 +610,7 @@ require(reshape2)
       #	cat(paste(length(GetAllMono(SelectedTrip))," species -> ",sep=""))
       cat("playing with ",nrow(ALLTRIPLETS), " triplets in total\n")
       
-      if (cpt%%Freq.remove==0) {
+      if ((cpt%%Freq.remove==0)&(JUST_DID_IT==FALSE)) { ##JUST_DID_IT==FALSE -> we DO NOT remove one of the triplets if we just reintegrated everyone.
         GetScoresDetails<-sapply(SelectedTrip, GetTripletScores_rm, selectedtriplets=SelectedTrip)
         GetScores<-apply(GetScoresDetails,2,geomean)
         TripletOfInterest<-sample(names(which(GetScores==max(GetScores))),1)
@@ -665,10 +665,8 @@ require(reshape2)
           
           # }
           
-          cat("N triplets after filtering: ",length(AvailableTrip), "\n")
-          
-        }
-        
+          # cat("N triplets after filtering: ",length(AvailableTrip), "\n")
+        }        
         # compute scores for new potential triplets
         
         GetScoresDetails<-GetTripletScores2(AvailableTrip, SelectedTrip)
@@ -678,8 +676,8 @@ require(reshape2)
           print("Too many tachninids...")
           #we generate a sublist of scores with ONLY the non-TACH cases.
           GetScores2<-GetScores[!isTachOrNot(names(GetScores))]
-          cat("N all triplets:", length(GetScores))
-          cat("N triplets without tach:", length(GetScores2))
+          cat("N all triplets:", length(GetScores),'\n')
+          cat("N triplets without tach:", length(GetScores2),'\n')
         }
         else {
           print("Not too many tachninids...")
@@ -693,6 +691,7 @@ require(reshape2)
             GetScores3<-GetScores2
           }
           else { #not enough or too many parasitoids
+            cat("N all triplets2:", length(GetScores2),'\n')
             if (current_par_prop>=max_par_prop){ ##too many parasitoids -> keep only hhp and hhh
               print("Too many parasitoids... remove pph from possible triplets")
               GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))<2]
@@ -700,6 +699,7 @@ require(reshape2)
             if (current_par_prop<=min_par_prop){ ##too few parasitoids -> keep only pph and hhh (remove hhp)
               print("Too few parasitoids... remove hhp and hhh from possible triplets")
               GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))==2] # if we want to remove hhp and hhh
+              cat("N triplets without hhp and hhh:", length(GetScores3),'\n')
               #GetScores3<-GetScores2[WhatTypeOfTriplet(names(GetScores2))!=1] # if only want to remove hhp
             }
           }
@@ -709,16 +709,19 @@ require(reshape2)
             #print(GetTachProp(SelectedTrip))
             #print(GetTachProp(c(SelectedTrip, TripletOfInterest)))
             NewListOfSpecies <- unique(c(GetAllMono(SelectedTrip), array(str2trip(TripletOfInterest))))
+            printit(GetScoresDetails[,TripletOfInterest], geomean(GetScoresDetails[,TripletOfInterest]), length(GetAllMono(SelectedTrip)))
+            cat("---\n")
+
           }
           else {
             REBUILD_SUBLIST<-TRUE
           }
         }
-
         else {
           REBUILD_SUBLIST<-TRUE        ##TELL THAT WE NEED TO MAKE A NEW SUBLIST WITH NON-TACH TRIPLETS
         }
         #		cat(paste("added",TripletOfInterest,"\n"))
+        # print results
       }
       if ((cpt == 1) || ((cpt-1)%%Freq.reload_all_TRIPLETS==0) || (JUST_DID_IT==TRUE)) { ##we just did the first run OR we are just after a turn where we retook everyone 
         cat("\n# Sampling best triplets for next runs...\n")
@@ -753,9 +756,11 @@ require(reshape2)
       # compute tach proportion after random phase
       current_tach_prop <- GetTachProp(SelectedTrip)
       
+      cat("N triplets now: ",length(AvailableTrip), "\n")
+
       # print results
-      printit(GetScoresDetails[,TripletOfInterest], geomean(GetScoresDetails[,TripletOfInterest]), length(GetAllMono(SelectedTrip)))
-      cat("---\n")
+      # printit(GetScoresDetails[,TripletOfInterest], geomean(GetScoresDetails[,TripletOfInterest]), length(GetAllMono(SelectedTrip)))
+      # cat("---\n")
       #	cat(paste(c("sc_HHP:", "sc_PPH:", "sc_HHH:", "sc_SGP:"),GetScoresDetails[,TripletOfInterest]))
       #	cat("\n")
       
